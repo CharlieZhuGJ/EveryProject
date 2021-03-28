@@ -4,7 +4,7 @@
     
     https://github.com/raghavchalapathy/oc-nn  
     
-2. 项目2  
+2. cornell-movie-chatbot 
 
 3. 项目3 
 
