@@ -20,9 +20,9 @@
     https://github.com/google-research/mixmatch
 
 6. ReMixMatch  
-    ReMixMatch: Semi-Supervised Learning with Distribution Alignment and Augmentation Anchoring
+    ReMixMatch: Semi-Supervised Learning with Distribution Alignment and Augmentation Anchoring  
     https://github.com/google-research/remixmatch
 
 7. SimCLR  
-    SimCLR - A Simple Framework for Contrastive Learning of Visual Representations
+    SimCLR - A Simple Framework for Contrastive Learning of Visual Representations  
     https://github.com/google-research/simclr
