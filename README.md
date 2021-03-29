@@ -16,7 +16,7 @@
     https://github.com/NetManAIOps/Log2Vec
         
 5. mixmatch  
-    MixMatch - A Holistic Approach to Semi-Supervised Learning
+    MixMatch - A Holistic Approach to Semi-Supervised Learning  
     https://github.com/google-research/mixmatch
 
 6. ReMixMatch  
