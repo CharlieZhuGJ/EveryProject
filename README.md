@@ -16,7 +16,7 @@
     https://github.com/NetManAIOps/Log2Vec
         
 5. mixmatch  
-    MixMatch - A Holistic Approach to Semi-Supervised Learning  
+    MixMatch - A Holistic Approach to Semi-Supervised Learning
     https://github.com/google-research/mixmatch
 
 6. ReMixMatch  
@@ -26,3 +26,13 @@
 7. SimCLR  
     SimCLR - A Simple Framework for Contrastive Learning of Visual Representations  
     https://github.com/google-research/simclr
+
+8. imdb-classification  
+    classification of imdb reviews by using lstm.  
+    run main.py to get ws.pkl, and then run train.py to get model.
+
+9. WSDM  
+    https://www.kaggle.com/c/fake-news-pair-classification-challenge
+
+10. REAL and FAKE news dataset  
+    https://www.kaggle.com/nopdev/real-and-fake-news-dataset
