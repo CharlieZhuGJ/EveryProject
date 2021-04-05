@@ -5,7 +5,8 @@
     https://github.com/raghavchalapathy/oc-nn  
     
 2. cornell-movie-chatbot  
-    使用康奈尔电影对话数据集训练对话机器人。
+    http://www.cs.cornell.edu/~cristian/Cornell_Movie-Dialogs_Corpus.html   
+    https://github.com/SudharshanShanmugasundaram/Chatbot
     
 3. FT-Tree  
     IWQoS 2017: A toolkit for log template extraction  
@@ -36,3 +37,10 @@
 
 10. REAL and FAKE news dataset  
     https://www.kaggle.com/nopdev/real-and-fake-news-dataset
+    
+11. pytorch-seq2seq  
+    amazing tutorial for learning seq2seq in pytorch.  
+    https://github.com/bentrevett/pytorch-seq2seq
+
+
+
