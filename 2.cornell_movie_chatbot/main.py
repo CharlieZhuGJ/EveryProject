@@ -1,7 +1,11 @@
 from train import encoder, decoder
 from eval import evaluateInput
-from model import Attn, LuongAttnDecoderRNN, EncoderRNN, GreedySearchDecoder
-from dataset import voc
+from model import GreedySearchDecoder
+import pickle
+import os
+from config import corpus, voc_file
+
+voc = pickle.load(open(os.path.join(corpus, voc_file), 'rb'))
 
 # 将dropout layers设置为eval模式
 encoder.eval()

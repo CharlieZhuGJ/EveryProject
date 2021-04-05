@@ -1,7 +1,9 @@
 import re
+import os
+import pickle
 import torch
 import jieba.posseg as pseg
-from config import device
+from config import device, trimed_datafile, corpus, voc_file
 
 
 # 5.定义训练步骤
@@ -49,3 +51,20 @@ def jieba_tokenizer(text):
     words = pseg.cut(text)
     res = [word for word, flag in words if flag != 'x']
     return res
+
+
+def get_saved_voc():
+    voc = pickle.load(open(os.path.join(corpus, voc_file), 'rb'))
+    return voc
+
+
+def get_saved_paird():
+    pairs = []
+    with open(os.path.join(corpus, trimed_datafile), 'r') as txt:
+        lines = txt.readlines()
+        for line in lines:
+            ab = line.split("\t")
+            first = ab[0].strip()
+            second = ab[1].strip()
+            pairs.append([first, second])
+    return pairs

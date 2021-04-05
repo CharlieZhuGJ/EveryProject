@@ -1,6 +1,6 @@
 import torch
 from config import device, MAX_LENGTH
-from dataset import indexes_from_sentence, normalizeString
+from dataset import indexes_from_sentence, normalize_string
 
 
 def evaluate(encoder, decoder, searcher, voc, sentence, max_length=MAX_LENGTH):
@@ -13,7 +13,7 @@ def evaluate(encoder, decoder, searcher, voc, sentence, max_length=MAX_LENGTH):
     input_batch = torch.LongTensor(indexes_batch).transpose(0, 1)
     # Use appropriate device
     input_batch = input_batch.to(device)
-    lengths = lengths.to(device)
+    # lengths = lengths.to(device)
     # Decode sentence with searcher
     tokens, scores = searcher(input_batch, lengths, max_length)
     # indexes -> words
@@ -30,7 +30,7 @@ def evaluateInput(encoder, decoder, searcher, voc):
             # Check if it is quit case
             if input_sentence == 'q' or input_sentence == 'quit': break
             # Normalize sentence
-            input_sentence = normalizeString(input_sentence)
+            input_sentence = normalize_string(input_sentence)
             # Evaluate sentence
             output_words = evaluate(encoder, decoder, searcher, voc, input_sentence)
             # Format and print response sentence
@@ -39,3 +39,6 @@ def evaluateInput(encoder, decoder, searcher, voc):
 
         except KeyError:
             print("Error: Encountered unknown word.")
+
+
+

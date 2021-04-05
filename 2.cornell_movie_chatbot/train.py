@@ -1,4 +1,5 @@
 import os
+import pickle
 import torch
 import random
 import torch.nn as nn
@@ -6,18 +7,23 @@ from torch import optim
 from utils import maskNLLLoss
 from config import teacher_forcing_ratio, device, MAX_LENGTH, SOS_token, corpus_name
 from model import Attn, LuongAttnDecoderRNN, EncoderRNN, GreedySearchDecoder
-from dataset import get_batch_train_data, voc, pairs
+from dataset import get_batch_train_data
+from config import corpus, voc_file, trimed_datafile
+from config import model_name, attn_model, hidden_size, encoder_n_layers, decoder_n_layers, dropout,\
+    batch_size, save_dir, loadFilename, checkpoint_iter
+from config import clip, learning_rate, decoder_learning_ratio, n_iteration, print_every, save_every
+from utils import get_saved_paird, get_saved_voc
+
 
 def train(input_variable, lengths, target_variable, mask, max_target_len, encoder, decoder, embedding,
           encoder_optimizer, decoder_optimizer, batch_size, clip, max_length=MAX_LENGTH):
-
     # Zero gradients
     encoder_optimizer.zero_grad()
     decoder_optimizer.zero_grad()
 
     # Set device options
     input_variable = input_variable.to(device)
-    lengths = lengths.to(device)
+    # lengths = lengths.to(device)
     target_variable = target_variable.to(device)
     mask = mask.to(device)
 
@@ -81,11 +87,12 @@ def train(input_variable, lengths, target_variable, mask, max_target_len, encode
     return sum(print_losses) / n_totals
 
 
-def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, decoder_optimizer, embedding, encoder_n_layers, decoder_n_layers, save_dir, n_iteration, batch_size, print_every, save_every, clip, corpus_name, loadFilename):
-
+def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, decoder_optimizer,
+               embedding, encoder_n_layers, decoder_n_layers, save_dir, n_iteration, batch_size,
+               print_every, save_every, clip, corpus_name, loadFilename):
     # Load batches for each iteration
     training_batches = [get_batch_train_data(voc, [random.choice(pairs) for _ in range(batch_size)])
-                      for _ in range(n_iteration)]
+                        for _ in range(n_iteration)]
 
     # Initializations
     print('Initializing ...')
@@ -109,12 +116,15 @@ def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, deco
         # Print progress
         if iteration % print_every == 0:
             print_loss_avg = print_loss / print_every
-            print("Iteration: {}; Percent complete: {:.1f}%; Average loss: {:.4f}".format(iteration, iteration / n_iteration * 100, print_loss_avg))
+            print("Iteration: {}; Percent complete: {:.1f}%; Average loss: {:.4f}".format(iteration,
+                                                                                          iteration / n_iteration * 100,
+                                                                                          print_loss_avg))
             print_loss = 0
 
         # Save checkpoint
-        if (iteration % save_every == 0):
-            directory = os.path.join(save_dir, model_name, corpus_name, '{}-{}_{}'.format(encoder_n_layers, decoder_n_layers, hidden_size))
+        if iteration % save_every == 0:
+            directory = os.path.join(save_dir, model_name, corpus_name,
+                                     '{}-{}_{}'.format(encoder_n_layers, decoder_n_layers, hidden_size))
             if not os.path.exists(directory):
                 os.makedirs(directory)
             torch.save({
@@ -129,32 +139,39 @@ def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, deco
             }, os.path.join(directory, '{}_{}.tar'.format(iteration, 'checkpoint')))
 
 
-# Configure models
-model_name = 'cb_model'
-attn_model = 'dot'
-#attn_model = 'general'
-#attn_model = 'concat'
-hidden_size = 512
-encoder_n_layers = 2
-decoder_n_layers = 2
-dropout = 0.1
-batch_size = 32
-save_dir = os.path.join("data", "save")
+voc = pickle.load(open(os.path.join(corpus, voc_file), 'rb'))
+pairs = get_saved_paird
+
+print('Building encoder and decoder ...')
+# Initialize word embeddings
+embedding = nn.Embedding(voc.num_words, hidden_size)
+# Initialize encoder & decoder models
+encoder = EncoderRNN(hidden_size, embedding, encoder_n_layers, dropout)
+decoder = LuongAttnDecoderRNN(attn_model, embedding, hidden_size, voc.num_words, decoder_n_layers, dropout)
+
+# 确保dropout layers在训练模型中
+encoder.train()
+decoder.train()
+# Use appropriate device
+encoder = encoder.to(device)
+decoder = decoder.to(device)
+print('Models built and ready to go!')
+
+
+# 初始化优化器
+print('Building optimizers ...')
+encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
+decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate * decoder_learning_ratio)
+
+
 
 # NOTE : Set checkpoint to load from; set to None if starting from scratch
-# loadFilename = None
-checkpoint_iter = 8000
-loadFilename = os.path.join(save_dir, model_name, corpus_name,
-                           '{}-{}_{}'.format(encoder_n_layers, decoder_n_layers, hidden_size),
-                           '{}_checkpoint.tar'.format(checkpoint_iter))
-
-
 # Load model if a loadFilename is provided
 if loadFilename:
     # If loading on same machine the model was trained on
     checkpoint = torch.load(loadFilename)
     # If loading a model trained on GPU to CPU
-    #checkpoint = torch.load(loadFilename, map_location=torch.device('cpu'))
+    # checkpoint = torch.load(loadFilename, map_location=torch.device('cpu'))
     encoder_sd = checkpoint['en']
     decoder_sd = checkpoint['de']
     encoder_optimizer_sd = checkpoint['en_opt']
@@ -162,50 +179,20 @@ if loadFilename:
     embedding_sd = checkpoint['embedding']
     voc.__dict__ = checkpoint['voc_dict']
 
-
-print('Building encoder and decoder ...')
-# Initialize word embeddings
-embedding = nn.Embedding(voc.num_words, hidden_size)
-if loadFilename:
     embedding.load_state_dict(embedding_sd)
-# Initialize encoder & decoder models
-encoder = EncoderRNN(hidden_size, embedding, encoder_n_layers, dropout)
-decoder = LuongAttnDecoderRNN(attn_model, embedding, hidden_size, voc.num_words, decoder_n_layers, dropout)
-if loadFilename:
     encoder.load_state_dict(encoder_sd)
     decoder.load_state_dict(decoder_sd)
-# Use appropriate device
-encoder = encoder.to(device)
-decoder = decoder.to(device)
-print('Models built and ready to go!')
 
-
-# 配置训练/优化
-clip = 50.0
-teacher_forcing_ratio = 1.0
-learning_rate = 0.0001
-decoder_learning_ratio = 5.0
-n_iteration = 4000
-print_every = 1
-save_every = 500
-
-# 确保dropout layers在训练模型中
-encoder.train()
-decoder.train()
-
-
-# 初始化优化器
-print('Building optimizers ...')
-encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
-decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate * decoder_learning_ratio)
-if loadFilename:
     encoder_optimizer.load_state_dict(encoder_optimizer_sd)
     decoder_optimizer.load_state_dict(decoder_optimizer_sd)
 
-# 运行训练迭代
-print("Starting Training!")
-trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, decoder_optimizer,
-           embedding, encoder_n_layers, decoder_n_layers, save_dir, n_iteration, batch_size,
-           print_every, save_every, clip, corpus_name, loadFilename)
+
+if __name__ == "__main__":
+    #  运行训练迭代
+    print("Starting Training!")
+
+    trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, decoder_optimizer,
+               embedding, encoder_n_layers, decoder_n_layers, save_dir, n_iteration, batch_size,
+               print_every, save_every, clip, corpus_name, loadFilename)
 
 

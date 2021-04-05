@@ -6,7 +6,7 @@
     
 2. cornell-movie-chatbot  
     http://www.cs.cornell.edu/~cristian/Cornell_Movie-Dialogs_Corpus.html   
-    https://github.com/SudharshanShanmugasundaram/Chatbot
+    https://github.com/fendouai/PyTorchDocs/blob/master/FifthSection/Chatbot.md
     
 3. FT-Tree  
     IWQoS 2017: A toolkit for log template extraction  

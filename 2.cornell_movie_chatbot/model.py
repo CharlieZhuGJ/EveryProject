@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from config import device, SOS_token
 
+
 class EncoderRNN(nn.Module):
     def __init__(self, hidden_size, embedding, n_layers=1, dropout=0):
         super(EncoderRNN, self).__init__()
@@ -76,11 +77,11 @@ class LuongAttnDecoderRNN(nn.Module):
     def __init__(self, attn_model, embedding, hidden_size, output_size, n_layers=1, dropout=0.1):
         super(LuongAttnDecoderRNN, self).__init__()
 
-        self.attn_model = attn_model
-        self.hidden_size = hidden_size
-        self.output_size = output_size
-        self.n_layers = n_layers
-        self.dropout = dropout
+        self.attn_model = attn_model  # 注意力类型
+        self.hidden_size = hidden_size  # 隐藏层尺寸为encoder的输出维度
+        self.output_size = output_size  # 输出维度为整个词表的大小
+        self.n_layers = n_layers  # decoder层数
+        self.dropout = dropout  # 丢弃率
 
         # 定义层
         self.embedding = embedding

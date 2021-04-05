@@ -1,14 +1,17 @@
 import re
 import os
 import csv
-import codecs
+import pickle
 import torch
 import random
 import itertools
 import unicodedata
 from io import open
-corpus_name = "cornell movie-dialogs corpus"
-corpus = os.path.join("data", corpus_name)
+from config import trimed_datafile
+from config import corpus_name, corpus, movie_lines_file, datafile, delimiter, \
+    MOVIE_LINES_FIELDS, MOVIE_CONVERSATIONS_FIELDS, save_dir, voc_file
+
+from config import PAD_token, SOS_token, EOS_token, MAX_LENGTH, MIN_COUNT, small_batch_size
 
 
 # 2.1 加载数据并转换为对话格式
@@ -22,7 +25,6 @@ def print_file_by_line(file, n=10):
         print(line)
 
 
-movie_lines_file = os.path.join(corpus, "movie_lines.txt")
 print_file_by_line(movie_lines_file)
 
 
@@ -89,49 +91,6 @@ def extract_sentence_pairs(conversations):
     return qa_pairs
 
 
-# 定义新文件的路径
-datafile = os.path.join(corpus, "formatted_movie_lines.txt")
-delimiter = '\t'
-delimiter = str(codecs.decode(delimiter, "unicode_escape"))
-
-# 初始化行dict，对话列表和字段ID
-# lines = {}
-# conversations = []
-MOVIE_LINES_FIELDS = ["lineID", "characterID", "movieID", "character", "text"]
-MOVIE_CONVERSATIONS_FIELDS = ["character1ID", "character2ID", "movieID", "utteranceIDs"]
-
-# 加载行和进程对话
-print("\nProcessing corpus...")
-lines = get_movie_data_dict(os.path.join(corpus, "movie_lines.txt"), MOVIE_LINES_FIELDS)
-print(lines)
-print("\nLoading conversations...")
-conversations = get_conversations(os.path.join(corpus, "movie_conversations.txt"),
-                                  lines, MOVIE_CONVERSATIONS_FIELDS)
-
-# 写入新的csv文件
-print("\nWriting newly formatted file...")
-with open(datafile, 'w', encoding='utf-8') as output_file:
-    writer = csv.writer(output_file, delimiter=delimiter, lineterminator='\n')
-    sentence_pairs = extract_sentence_pairs(conversations)
-    for pair in sentence_pairs:
-        writer.writerow(pair)
-
-# 打印一个样本的行
-print("\nSample lines from file:")
-print_file_by_line(datafile)
-
-
-corpus_name = "cornell movie-dialogs corpus"
-corpus = os.path.join("data", corpus_name)
-datafile = os.path.join(corpus, "formatted_movie_lines.txt")
-
-# 2.2 加载和清洗数据
-# 默认词向量
-PAD_token = 0  # Used for padding short sentences
-SOS_token = 1  # Start-of-sentence token
-EOS_token = 2  # End-of-sentence token
-
-
 class Voc:
     def __init__(self, name):
         self.name = name
@@ -141,11 +100,11 @@ class Voc:
         self.index2word = {PAD_token: "PAD", SOS_token: "SOS", EOS_token: "EOS"}
         self.num_words = 3  # Count SOS, EOS, PAD
 
-    def addSentence(self, sentence):
+    def add_sentence(self, sentence):
         for word in sentence.split(' '):
-            self.addWord(word)
+            self.add_word(word)
 
-    def addWord(self, word):
+    def add_word(self, word):
         if word not in self.word2index:
             self.word2index[word] = self.num_words
             self.word2count[word] = 1
@@ -177,7 +136,7 @@ class Voc:
         self.num_words = 3  # Count default tokens
 
         for word in keep_words:
-            self.addWord(word)
+            self.add_word(word)
 
 
 # 现在我们可以组装词汇表和查询/响应语句对。在使用数据之前，我们必须做一些预处理。
@@ -185,8 +144,6 @@ class Voc:
 # 首先，我们必须使用unicodeToAscii将 unicode 字符串转换为 ASCII。
 # 然后，我们应该将所有字母转换为小写字母并清洗掉除基本标点之 外的所有非字母字符 (normalizeString)。
 # 最后，为了帮助训练收敛，我们将过滤掉长度大于MAX_LENGTH 的句子 (filterPairs)。
-
-MAX_LENGTH = 10  # Maximum sentence length to consider
 
 
 def unicode_to_ascii(s):
@@ -201,7 +158,7 @@ def unicode_to_ascii(s):
     )
 
 
-def normalizeString(sent):
+def normalize_string(sent):
     """
     分三个步骤进行标准化：大小写转变（case folding）、词干提取（stemming）、词形还原（lemmatization）
     将所有字母转换为小写字母并清洗掉除基本标点之 外的所有非字母字符 (normalizeString)。
@@ -231,44 +188,44 @@ def get_Voc(data_file, corpus):
     """
     获取Voc对象，格式化对话数据并存放到列表中
     @param data_file:
-    @param corpus:
+    @param corpus: Voc对象名称
     @return:
     """
     print("Reading lines...")
     # Read the file and split into lines
     lines = open(data_file, encoding='utf-8').read().strip().split('\n')
     # Split every line into pairs and normalize
-    pairs = [[normalizeString(s) for s in l.split('\t')] for l in lines]
+    pairs = [[normalize_string(s) for s in line.split('\t')] for line in lines]
     voc = Voc(corpus)
     return voc, pairs
 
 
-def filter_or_not_pairs(p):
+def filter_or_not_pairs(pair):
     """
-    如果对 'p' 中的两个句子都低于 MAX_LENGTH 阈值，则返回True
-    @param p:
+    如果对 'pair' 中的两个句子都低于 MAX_LENGTH 阈值，则返回True
+    @param pair:
     @return:
     """
     # Input sequences need to preserve the last word for EOS token
-    return len(p[0].split(' ')) < MAX_LENGTH and len(p[1].split(' ')) < MAX_LENGTH
+    return len(pair[0].split(' ')) < MAX_LENGTH and len(pair[1].split(' ')) < MAX_LENGTH
 
 
 def filter_pairs(pairs):
     """
     过滤满足条件的 pairs对话
-    @param p:
+    @param pairs:
     @return:
     """
     return [pair for pair in pairs if filter_or_not_pairs(pair)]
 
 
-def get_prepared_data(corpus, corpus_name, datafile, save_dir):
+def get_prepared_data(corpus, corpus_name, datafile, voc_file):
     """
     使用上面定义的函数，返回一个填充的voc对象和对列表
     @param corpus:
     @param corpus_name:
     @param datafile:
-    @param save_dir:
+    @param voc_file: 词汇对象保存文件名
     @return:
     """
     print("Start preparing training data ...")
@@ -278,26 +235,11 @@ def get_prepared_data(corpus, corpus_name, datafile, save_dir):
     print("Trimmed to {!s} sentence pairs".format(len(pairs)))
     print("Counting words...")
     for pair in pairs:
-        voc.addSentence(pair[0])
-        voc.addSentence(pair[1])
+        voc.add_sentence(pair[0])
+        voc.add_sentence(pair[1])
     print("Counted words:", voc.num_words)
+
     return voc, pairs
-
-
-# 加载/组装voc和对
-save_dir = os.path.join("data", "save")
-voc, pairs = get_prepared_data(corpus, corpus_name, datafile, save_dir)
-# 打印一些对进行验证
-print("\n pairs:")
-for pair in pairs[:10]:
-    print(pair)
-
-# 另一种有利于让训练更快收敛的策略是去除词汇表中很少使用的单词。减少特征空间也会降低模型学习目标函数的难度。
-# 我们通过以下两个步 骤完成这个操作:
-# 使用voc.trim函数去除 MIN_COUNT 阈值以下单词 。
-# 如果句子中包含词频过小的单词，那么整个句子也被过滤掉。
-
-MIN_COUNT = 3  # 修剪的最小字数阈值
 
 
 def trim_rare_words(voc, pairs, MIN_COUNT):
@@ -316,11 +258,13 @@ def trim_rare_words(voc, pairs, MIN_COUNT):
         output_sentence = pair[1]
         keep_input = True
         keep_output = True
+
         # 检查输入句子
         for word in input_sentence.split(' '):
             if word not in voc.word2index:
                 keep_input = False
                 break
+
         # 检查输出句子
         for word in output_sentence.split(' '):
             if word not in voc.word2index:
@@ -336,10 +280,6 @@ def trim_rare_words(voc, pairs, MIN_COUNT):
     return keep_pairs
 
 
-# 修剪voc和对
-pairs = trim_rare_words(voc, pairs, MIN_COUNT)
-
-
 # 3.为模型准备数据
 def indexes_from_sentence(voc, sentence):
     """
@@ -351,62 +291,62 @@ def indexes_from_sentence(voc, sentence):
     return [voc.word2index[word] for word in sentence.split(' ')] + [EOS_token]
 
 
-def zero_padding(l, fillvalue=PAD_token):
+def zero_padding(batch, fill_value=PAD_token):
     """
     zip对数据进行合并了，相当于行列转置了
-    @param l:
-    @param fillvalue:
+    @param fill_value:
+    @param batch:
     @return:
     """
-    return list(itertools.zip_longest(*l, fillvalue=fillvalue))
+    return list(itertools.zip_longest(*batch, fillvalue=fill_value))
 
 
-def binary_matrix(l, value=PAD_token):
+def binary_matrix(batch, value=PAD_token):
     """
-    记录 PAD_token的位置为0， 其他的为1
-    @param l:
+    记录PAD_token的位置为0， 其他的为1
+    @param batch:
     @param value:
     @return:
     """
     m = []
-    for i, seq in enumerate(l):
+    for i, seq in enumerate(batch):
         m.append([])
         for token in seq:
-            if token == PAD_token:
+            if token == value:
                 m[i].append(0)
             else:
                 m[i].append(1)
     return m
 
 
-def input_vars(l, voc):
+def input_vars(batch, voc):
     """
-    返回填充前（加入结束index EOS_token做标记）的长度 和 填充后的输入序列张量input_sents
-    @param l:
+    对于batch中每一个sample，返回填充前（加入结束index EOS_token做标记）的长度 和 填充后的输入序列张量input_sents
+    @param batch:
     @param voc:
     @return:
     """
-    indexes_batch = [indexes_from_sentence(voc, sentence) for sentence in l]
+    indexes_batch = [indexes_from_sentence(voc, sentence) for sentence in batch]
     lengths = torch.tensor([len(indexes) for indexes in indexes_batch])
-    padList = zero_padding(indexes_batch)
-    padVar = torch.LongTensor(padList)
-    return padVar, lengths
+    pad_list = zero_padding(indexes_batch)
+    pad_var = torch.LongTensor(pad_list)
+    return pad_var, lengths
 
 
-def output_vars(l, voc):
+def output_vars(batch, voc):
     """
-    返回填充前（加入结束index EOS_token做标记）最长的一个长度 和 填充后的输入序列张量, 和 填充后的标记 mask
-    @param l:
+    对于batch中每一个sample，返回填充前（加入结束index EOS_token做标记）最长的一个长度和填充后的输入序列张量,和填充后的标记 mask
+    @param batch:
     @param voc:
     @return:
     """
-    indexes_batch = [indexes_from_sentence(voc, sentence) for sentence in l]
+    indexes_batch = [indexes_from_sentence(voc, sentence) for sentence in batch]
     max_target_len = max([len(indexes) for indexes in indexes_batch])
-    padList = zero_padding(indexes_batch)
-    mask = binary_matrix(padList)
+    pad_list = zero_padding(indexes_batch)
+    mask = binary_matrix(pad_list)
     mask = torch.ByteTensor(mask)
-    padVar = torch.LongTensor(padList)
-    return padVar, mask, max_target_len
+    pad_var = torch.LongTensor(pad_list)
+    return pad_var, mask, max_target_len
 
 
 def get_batch_train_data(voc, pair_batch):
@@ -426,22 +366,62 @@ def get_batch_train_data(voc, pair_batch):
     return inp, length, output, mask, max_target_len
 
 
-# 验证例子
-small_batch_size = 5
-batches = get_batch_train_data(voc, [random.choice(pairs) for _ in range(small_batch_size)])
-input_variable, input_lengths, target_variable, mask, max_target_len = batches
+if __name__ == "__main__":
+    # 初始化行dict，对话列表和字段ID，lines是指电影相关的信息；conversations对话信息
+    # 加载行和进程对话
+    print("\nProcessing corpus...")
+    lines = get_movie_data_dict(os.path.join(corpus, "movie_lines.txt"), MOVIE_LINES_FIELDS)
+    print(lines)
+    print("\nLoading conversations...")
+    conversations = get_conversations(os.path.join(corpus, "movie_conversations.txt"),
+                                      lines, MOVIE_CONVERSATIONS_FIELDS)
 
-print("input_variable: \n", input_variable)
-print("lengths: \n", input_lengths)
-print("target_variable: \n", target_variable)
-print("mask: \n", mask)
-print("max_target_len: \n", max_target_len)
+    # 写入新的csv文件
+    print("\nWriting newly formatted file...")
+    with open(datafile, 'w', encoding='utf-8') as output_file:
+        writer = csv.writer(output_file, delimiter=delimiter, lineterminator='\n')
+        sentence_pairs = extract_sentence_pairs(conversations)
+        for pair in sentence_pairs:
+            writer.writerow(pair)
+
+    print("\nSample lines from file:")
+    print_file_by_line(datafile)
+
+    # 加载/组装voc和对
+    voc, pairs = get_prepared_data(corpus, corpus_name, datafile, voc_file)
+    # 打印一些对进行验证
+    print("\n pairs:")
+    for pair in pairs[:10]:
+        print(pair)
+
+    # 另一种有利于让训练更快收敛的策略是去除词汇表中很少使用的单词。减少特征空间也会降低模型学习目标函数的难度。
+    # 我们通过以下两个步 骤完成这个操作:
+    # 使用voc.trim函数去除 MIN_COUNT 阈值以下单词 。
+    # 如果句子中包含词频过小的单词，那么整个句子也被过滤掉。
+
+    # 修剪voc和对
+    pairs = trim_rare_words(voc, pairs, MIN_COUNT)
+
+    print("save Voc file")
+    # pickle.dump(voc, open(os.path.join(corpus, voc_file), "wb"))
+
+    # 写入新的csv文件
+    print("\nWriting newly formatted file...")
+    with open(trimed_datafile, 'w', encoding='utf-8') as output_file:
+        writer = csv.writer(output_file, delimiter=delimiter, lineterminator='\n')
+        for pair in pairs:
+            writer.writerow(pair)
+
+    # 验证例子
+    batches = get_batch_train_data(voc, [random.choice(pairs) for _ in range(small_batch_size)])
+    input_variable, input_lengths, target_variable, mask, max_target_len = batches
+
+    print("input_variable: \n", input_variable)
+    print("lengths: \n", input_lengths)
+    print("target_variable: \n", target_variable)
+    print("mask: \n", mask)
+    print("max_target_len: \n", max_target_len)
 
 
-def get_paras():
-    return voc, batches, pairs, save_dir, corpus_name
-
-
-
-
-
+    def get_paras():
+        return voc, batches, pairs, save_dir, corpus_name
